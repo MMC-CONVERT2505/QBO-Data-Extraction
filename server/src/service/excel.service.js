@@ -23,20 +23,43 @@ const INVOICE_HEADERS = [
 ];
 
 // ── Bill Sheet Headers ──
+// const BILL_HEADERS = [
+//   { key: 'PAYMENT_ID',        header: 'Payment id',                width: 15 },
+//   { key: 'REFERENCE_NO',      header: 'Reference no',              width: 15 },
+//   { key: 'NAME',              header: 'Name',                      width: 28 },
+//   { key: 'ALLOCATION_DATE',   header: 'Allocation date',           width: 18 },
+//   { key: 'CREDIT_NOTE_ID',    header: 'Credit id',                 width: 15 },
+//   { key: 'CREDIT_NOTE_NO',    header: 'Credit no',                 width: 15 },
+//   { key: 'LINKED_REF_NO',     header: 'Linked Ref no',             width: 15 },
+//   { key: 'LINKED_TXN_ID',     header: 'Linked txd id',             width: 15 },
+//   { key: 'APPLIED_AMOUNT',    header: 'Applied Amount',            width: 15 },
+//   { key: 'CREDIT_LINK_TYPE',  header: 'Credit Linked Type',        width: 20 },
+//   { key: 'LINKED_TYPE',       header: 'Linked type',               width: 15 },
+//   { key: 'TOTAL',             header: 'Total',                     width: 15 },
+// ];
+
+
 const BILL_HEADERS = [
-  { key: 'PAYMENT_ID',        header: 'Payment id',                width: 15 },
-  { key: 'REFERENCE_NO',      header: 'Reference no',              width: 15 },
-  { key: 'NAME',              header: 'Name',                      width: 28 },
-  { key: 'ALLOCATION_DATE',   header: 'Allocation date',           width: 18 },
-  { key: 'CREDIT_NOTE_ID',    header: 'Credit id',                 width: 15 },
-  { key: 'CREDIT_NOTE_NO',    header: 'Credit no',                 width: 15 },
-  { key: 'LINKED_REF_NO',     header: 'Linked Ref no',             width: 15 },
-  { key: 'LINKED_TXN_ID',     header: 'Linked txd id',             width: 15 },
-  { key: 'APPLIED_AMOUNT',    header: 'Applied Amount',            width: 15 },
-  { key: 'CREDIT_LINK_TYPE',  header: 'Credit Linked Type',        width: 20 },
-  { key: 'LINKED_TYPE',       header: 'Linked type',               width: 15 },
-  { key: 'TOTAL',             header: 'Total',                     width: 15 },
+  { key: 'PAYMENT_ID',       header: 'Payment ID',             width: 15 },
+  { key: 'REFERENCE_NO',     header: 'Reference No',           width: 15 },
+  { key: 'NAME',             header: 'Vendor Name',            width: 28 },
+  { key: 'ALLOCATION_DATE',  header: 'Allocation Date',        width: 18 },
+
+  { key: 'CREDIT_NOTE_ID',   header: 'Source Txn ID',          width: 15 },
+  { key: 'CREDIT_NOTE_NO',   header: 'Source Txn No',          width: 20 },
+
+  { key: 'LINKED_REF_NO',    header: 'Linked Txn No',          width: 20 },
+  { key: 'LINKED_TXN_ID',    header: 'Linked Txn ID',          width: 15 },
+
+  { key: 'APPLIED_AMOUNT',   header: 'Applied Amount',         width: 18 },
+
+  { key: 'CREDIT_LINK_TYPE', header: 'Source Transaction Type', width: 25 },
+
+  { key: 'LINKED_TYPE',      header: 'Linked Type',        width: 20 },
+
 ];
+
+
 
 const HEADER_STYLE = {
   font: { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 },
@@ -50,7 +73,11 @@ const HEADER_STYLE = {
   },
 };
 
-const DATE_KEYS = ['ALLOCATION_DATE'];
+const DATE_KEYS = [
+  'ALLOCATION_DATE',
+  'PAYMENT_DATE',
+  'TXN_DATE'
+];
 const AMOUNT_KEYS = ['APPLIED_AMOUNT', 'TOTAL'];
 
 const addSheet = (workbook, sheetName, data, headers) => {

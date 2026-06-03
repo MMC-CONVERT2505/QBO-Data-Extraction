@@ -14,8 +14,7 @@ const getBillAllocations =
           req.accessToken,
           req.realmId
         );
-
-        console.log("Bills : ", data)
+      console.log("Bills : ", data)
       res.json({
         success: true,
         count: data.length,
@@ -37,6 +36,10 @@ const exportBillAllocations =
           req.accessToken,
           req.realmId
         );
+      console.log(
+        "EXPORT RECORDS:",
+        billData.length
+      );
 
       const buffer =
         await generateExcel(
