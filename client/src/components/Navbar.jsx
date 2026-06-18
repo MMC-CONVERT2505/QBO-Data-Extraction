@@ -67,10 +67,8 @@ export default function Navbar({
           {/* Right - Sync & Disconnect */}
           <div className="flex items-center gap-4">
             <div className="hidden sm:block text-xs text-gray-500">
-              Last sync:{' '}
-              <span className="font-medium text-gray-700">
-                {formatLastSync(lastSync)}
-              </span>
+              
+             
             </div>
 
             <button

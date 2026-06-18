@@ -22,7 +22,7 @@ const paymentCacheSchema = new mongoose.Schema({
 }, { timestamps: false });
 
 paymentCacheSchema.index({ id: 1, realmId: 1 }, { unique: true });
-paymentCacheSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 86400 }); // Auto delete after 24h
+paymentCacheSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 86400 });
 
 // ── BillPayment Cache Schema ──
 const billPaymentCacheSchema = new mongoose.Schema({
@@ -35,7 +35,7 @@ const billPaymentCacheSchema = new mongoose.Schema({
 billPaymentCacheSchema.index({ id: 1, realmId: 1 }, { unique: true });
 billPaymentCacheSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 86400 });
 
-// ── Entity Cache Schema (CreditMemo, Invoice, JE etc.) ──
+// ── Entity Cache Schema ──
 const entityCacheSchema = new mongoose.Schema({
   cacheKey:   { type: String, required: true },
   realmId:    { type: String, required: true },
@@ -46,14 +46,28 @@ const entityCacheSchema = new mongoose.Schema({
 entityCacheSchema.index({ cacheKey: 1, realmId: 1 }, { unique: true });
 entityCacheSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 86400 });
 
+// ── QBO Auth Token Schema (replaces sessions folder) ──
+const qboTokenSchema = new mongoose.Schema({
+  sessionId:    { type: String, required: true, unique: true }, // opaque id given to frontend
+  accessToken:  { type: String, required: true },
+  refreshToken: { type: String, required: true },
+  realmId:      { type: String, required: true },
+  companyName:  { type: String, default: 'Production Company' },
+  createdAt:    { type: Date, default: Date.now },
+  updatedAt:    { type: Date, default: Date.now },
+}, { timestamps: false });
+
+qboTokenSchema.index({ sessionId: 1 }, { unique: true });
+// Auto-expire after 24h of inactivity (matches old session ttl)
+qboTokenSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 86400 });
+
 // ── Models ──
 export const PaymentCache     = mongoose.model('PaymentCache',     paymentCacheSchema);
 export const BillPaymentCache = mongoose.model('BillPaymentCache', billPaymentCacheSchema);
 export const EntityCache      = mongoose.model('EntityCache',      entityCacheSchema);
+export const QboToken         = mongoose.model('QboToken',         qboTokenSchema);
 
-// ── Helper Functions ──
-
-// Payment cache
+// ── Payment cache helpers ──
 export const getPaymentsFromCache = async (realmId) => {
   const cutoff = new Date(Date.now() - CACHE_TTL_MS);
   const docs = await PaymentCache.find({
@@ -71,11 +85,11 @@ export const savePaymentsToCache = async (realmId, payments) => {
       upsert: true,
     },
   }));
-  await PaymentCache.bulkWrite(ops);
+  if (ops.length) await PaymentCache.bulkWrite(ops);
   console.log(`💾 ${payments.length} payments cached in MongoDB`);
 };
 
-// BillPayment cache
+// ── BillPayment cache helpers ──
 export const getBillPaymentsFromCache = async (realmId) => {
   const cutoff = new Date(Date.now() - CACHE_TTL_MS);
   const docs = await BillPaymentCache.find({
@@ -93,11 +107,11 @@ export const saveBillPaymentsToCache = async (realmId, billPayments) => {
       upsert: true,
     },
   }));
-  await BillPaymentCache.bulkWrite(ops);
+  if (ops.length) await BillPaymentCache.bulkWrite(ops);
   console.log(`💾 ${billPayments.length} bill payments cached in MongoDB`);
 };
 
-// Entity cache
+// ── Entity cache helpers ──
 export const getEntityFromCache = async (cacheKey, realmId) => {
   const cutoff = new Date(Date.now() - CACHE_TTL_MS);
   const doc = await EntityCache.findOne({
@@ -116,7 +130,7 @@ export const saveEntityToCache = async (cacheKey, realmId, data) => {
   );
 };
 
-// Cache clear (logout pe)
+// ── Cache clear (logout pe) ──
 export const clearCacheForRealm = async (realmId) => {
   await Promise.all([
     PaymentCache.deleteMany({ realmId }),
@@ -124,6 +138,43 @@ export const clearCacheForRealm = async (realmId) => {
     EntityCache.deleteMany({ realmId }),
   ]);
   console.log(`🗑️ Cache cleared for realm: ${realmId}`);
+};
+
+// ── QBO Token helpers (replaces express-session + file store) ──
+export const createQboToken = async ({ sessionId, accessToken, refreshToken, realmId, companyName }) => {
+  await QboToken.findOneAndUpdate(
+    { sessionId },
+    {
+      $set: {
+        accessToken,
+        refreshToken,
+        realmId,
+        companyName: companyName || 'Production Company',
+        updatedAt: new Date(),
+      },
+      $setOnInsert: { createdAt: new Date() },
+    },
+    { upsert: true, new: true }
+  );
+};
+
+export const getQboToken = async (sessionId) => {
+  if (!sessionId) return null;
+  const doc = await QboToken.findOne({ sessionId }).lean();
+  return doc || null;
+};
+
+export const updateQboTokens = async (sessionId, { accessToken, refreshToken }) => {
+  const update = { updatedAt: new Date() };
+  if (accessToken)  update.accessToken  = accessToken;
+  if (refreshToken) update.refreshToken = refreshToken;
+
+  await QboToken.updateOne({ sessionId }, { $set: update });
+};
+
+export const deleteQboToken = async (sessionId) => {
+  if (!sessionId) return;
+  await QboToken.deleteOne({ sessionId });
 };
 
 export default connectDB;

@@ -154,6 +154,180 @@ const findSubsetMatch = (amounts) => {
   return null;
 };
 
+const getARDirection = async (
+  accessToken,
+  realmId,
+  txnId,
+  txnType
+) => {
+
+  try {
+
+    const client =
+      qboClient(
+        accessToken,
+        realmId
+      );
+
+    let endpoint = "";
+
+    if (
+      txnType === "Check" ||
+      txnType === "Expense" ||
+      txnType === "Purchase"
+    ) {
+      endpoint =
+        `/purchase/${txnId}`;
+    }
+    else if (
+      txnType === "Deposit"
+    ) {
+      endpoint =
+        `/deposit/${txnId}`;
+    }
+    else if (
+      txnType === "JournalEntry"
+    ) {
+      endpoint =
+        `/journalentry/${txnId}`;
+    }
+    else if (
+      txnType ===
+      "CreditCardCredit"
+    ) {
+      endpoint =
+        `/creditcardcredit/${txnId}`;
+    }
+    else {
+      return null;
+    }
+
+    const res =
+      await client.get(
+        `${endpoint}?minorversion=75`
+      );
+
+    const entity =
+      res.data?.Purchase ||
+      res.data?.Deposit ||
+      res.data?.JournalEntry ||
+      res.data?.CreditCardCredit;
+
+    if (!entity)
+      return null;
+
+    // JE
+    if (
+      txnType ===
+      "JournalEntry"
+    ) {
+
+      for (
+        const line of
+        entity.Line || []
+      ) {
+
+        const detail =
+          line
+            .JournalEntryLineDetail;
+
+        if (
+          detail?.AccountRef
+            ?.name ===
+          "Debtors"
+        ) {
+
+          return {
+            amount:
+              line.Amount,
+            direction:
+              detail.PostingType ===
+                "Debit"
+                ? "LINKED"
+                : "SOURCE"
+          };
+        }
+      }
+
+      return null;
+    }
+
+    // Purchase / Expense / Check
+    if (
+      txnType === "Check" ||
+      txnType === "Expense" ||
+      txnType === "Purchase"
+    ) {
+
+      const line =
+        entity.Line?.find(
+          l =>
+            l
+              .AccountBasedExpenseLineDetail
+              ?.AccountRef
+              ?.name ===
+            "Debtors"
+        );
+
+      if (!line)
+        return null;
+
+      return {
+        amount:
+          line.Amount
+      };
+    }
+
+    // Deposit
+    if (
+      txnType ===
+      "Deposit"
+    ) {
+
+      const line =
+        entity.Line?.find(
+          l =>
+            l
+              .DepositLineDetail
+              ?.AccountRef
+              ?.name ===
+            "Debtors"
+        );
+
+      if (!line)
+        return null;
+
+      return {
+        amount:
+          line.Amount
+      };
+    }
+
+    // CreditCardCredit
+    if (
+      txnType ===
+      "CreditCardCredit"
+    ) {
+
+      return {
+        amount:
+          entity.TotalAmt || 0
+      };
+    }
+
+    return null;
+
+  } catch (err) {
+
+    console.log(
+      `AR direction error ${txnType} ${txnId}`,
+      err.message
+    );
+
+    return null;
+  }
+};
+
 export const fetchInvoiceAllocations = async (accessToken, realmId, startDate, endDate) => {
   const results = [];
   const classCache = {};
@@ -213,43 +387,114 @@ export const fetchInvoiceAllocations = async (accessToken, realmId, startDate, e
       sourceGroup = [uniqueLines[1]];
     }
 
-    // RULE 2
     else {
 
-      const amounts =
-        uniqueLines.map(
-          x => Number(x.line.Amount || 0)
-        );
+      for (const item of uniqueLines) {
 
-      const firstAmount = amounts[0];
+        const txnType =
+          item.txn.TxnType;
 
-      const remainingSum =
-        amounts
-          .slice(1)
-          .reduce((a, b) => a + b, 0);
+        // Invoice
+        if (txnType === "Invoice") {
+          linkedGroup.push(item);
+          continue;
+        }
 
-      // CASE A
-      if (
-        Math.abs(
-          firstAmount - remainingSum
-        ) < 0.01
-      ) {
+        // CreditMemo
+        if (txnType === "CreditMemo") {
+          sourceGroup.push(item);
+          continue;
+        }
 
-        linkedGroup = [uniqueLines[0]];
-        sourceGroup = uniqueLines.slice(1);
+        const arInfo =
+          await getARDirection(
+            accessToken,
+            realmId,
+            item.txn.TxnId,
+            txnType
+          );
+
+        if (!arInfo)
+          continue;
+
+        // Expense / Check
+        if (
+          txnType === "Expense" ||
+          txnType === "Check" ||
+          txnType === "Purchase"
+        ) {
+
+          if (arInfo.amount >= 0)
+            linkedGroup.push(item);
+          else
+            sourceGroup.push(item);
+        }
+
+        // Deposit
+        else if (txnType === "Deposit") {
+
+          if (arInfo.amount >= 0)
+            sourceGroup.push(item);
+          else
+            linkedGroup.push(item);
+        }
+
+        // CreditCardCredit
+        else if (
+          txnType ===
+          "CreditCardCredit"
+        ) {
+
+          if (arInfo.amount >= 0)
+            sourceGroup.push(item);
+          else
+            linkedGroup.push(item);
+        }
+
+        // JournalEntry
+        else if (
+          txnType ===
+          "JournalEntry"
+        ) {
+
+          if (
+            arInfo.direction ===
+            "LINKED"
+          )
+            linkedGroup.push(item);
+          else
+            sourceGroup.push(item);
+        }
       }
 
-      else {
+      // Classification fail?
+      const failedClassification =
+        sourceGroup.length === 0 ||
+        linkedGroup.length === 0 ||
+        uniqueLines.length !==
+        (
+          sourceGroup.length +
+          linkedGroup.length
+        );
+
+      if (failedClassification) {
+
+        const amounts =
+          uniqueLines.map(
+            x => Number(
+              x.line.Amount || 0
+            )
+          );
 
         const subsetMatch =
           findSubsetMatch(amounts);
 
-        // CASE B
         if (subsetMatch) {
 
           linkedGroup =
             subsetMatch.subsetIdx.map(
-              idx => uniqueLines[idx]
+              idx =>
+                uniqueLines[idx]
             );
 
           sourceGroup = [
@@ -257,10 +502,8 @@ export const fetchInvoiceAllocations = async (accessToken, realmId, startDate, e
             subsetMatch.targetIdx
             ]
           ];
-        }
 
-        // CASE C
-        else {
+        } else {
 
           linkedGroup =
             [uniqueLines[0]];
@@ -270,7 +513,6 @@ export const fetchInvoiceAllocations = async (accessToken, realmId, startDate, e
         }
       }
     }
-
     validation.push({
       paymentId: payment.Id,
       txns: uniqueLines.length,
@@ -281,32 +523,134 @@ export const fetchInvoiceAllocations = async (accessToken, realmId, startDate, e
         linkedGroup.length
     });
     // ── Build rows ──
-    if (sourceGroup.length > 0 && linkedGroup.length > 0) {
-      for (const sEntry of sourceGroup) {
-        const sRef = await getDetail(sEntry.txn.TxnId, sEntry.txn.TxnType);
-        const sRefNo = getRefFromLineEx(sEntry.line.LineEx) || sRef?.docNumber || sEntry.txn.TxnId;
+    // =========================
+// FIFO ALLOCATION
+// =========================
 
-        for (const lEntry of linkedGroup) {
-          const lRef = await getDetail(lEntry.txn.TxnId, lEntry.txn.TxnType);
-          const lRefNo = getRefFromLineEx(lEntry.line.LineEx) || lRef?.docNumber || lEntry.txn.TxnId;
+if (
+  sourceGroup.length > 0 &&
+  linkedGroup.length > 0
+) {
 
-          results.push({
-            PAYMENT_ID: payment.Id,
-            REFERENCE_NO: payment.PaymentRefNum || payment.Id,
-            NAME: payment.CustomerRef?.name || '',
-            ALLOCATION_DATE: payment.TxnDate || '',
-            CREDIT_NOTE_ID: sEntry.txn.TxnId,
-            CREDIT_NOTE_NO: sRefNo,
-            LINKED_REF_NO: lRefNo,
-            LINKED_TXN_ID: lEntry.txn.TxnId,
-            APPLIED_AMOUNT: getAppliedAmount(sEntry, lEntry, sourceGroup, linkedGroup),
-            CREDIT_LINK_TYPE: sEntry.txn.TxnType,
-            LINKED_TYPE: lEntry.txn.TxnType,
-            TOTAL: sRef?.totalAmt || '',
-          });
-        }
+  const sourcePool =
+    sourceGroup.map(s => ({
+
+      entry: s,
+
+      remaining:
+        getOpenBalanceFromLineEx(
+          s.line.LineEx
+        ) ??
+        s.line.Amount
+    }));
+
+  const linkedPool =
+    linkedGroup.map(l => ({
+
+      entry: l,
+
+      remaining:
+        getOpenBalanceFromLineEx(
+          l.line.LineEx
+        ) ??
+        l.line.Amount
+    }));
+
+  let sourceIndex = 0;
+
+  for (const linked of linkedPool) {
+
+    while (
+      linked.remaining > 0 &&
+      sourceIndex < sourcePool.length
+    ) {
+
+      const source =
+        sourcePool[sourceIndex];
+
+      const applied =
+        Math.min(
+          linked.remaining,
+          source.remaining
+        );
+
+      const sEntry =
+        source.entry;
+
+      const lEntry =
+        linked.entry;
+
+      const sRef =
+        await getDetail(
+          sEntry.txn.TxnId,
+          sEntry.txn.TxnType
+        );
+
+      const lRef =
+        await getDetail(
+          lEntry.txn.TxnId,
+          lEntry.txn.TxnType
+        );
+
+      results.push({
+
+        PAYMENT_ID:
+          payment.Id,
+
+        REFERENCE_NO:
+          payment.PaymentRefNum ||
+          payment.Id,
+
+        NAME:
+          payment.CustomerRef?.name || '',
+
+        ALLOCATION_DATE:
+          payment.TxnDate || '',
+
+        CREDIT_NOTE_ID:
+          sEntry.txn.TxnId,
+
+        CREDIT_NOTE_NO:
+          getRefFromLineEx(
+            sEntry.line.LineEx
+          ) ||
+          sRef?.docNumber ||
+          sEntry.txn.TxnId,
+
+        LINKED_REF_NO:
+          getRefFromLineEx(
+            lEntry.line.LineEx
+          ) ||
+          lRef?.docNumber ||
+          lEntry.txn.TxnId,
+
+        LINKED_TXN_ID:
+          lEntry.txn.TxnId,
+
+        APPLIED_AMOUNT:
+          applied,
+
+        CREDIT_LINK_TYPE:
+          sEntry.txn.TxnType,
+
+        LINKED_TYPE:
+          lEntry.txn.TxnType,
+
+        TOTAL:
+          sRef?.totalAmt || ''
+      });
+
+      linked.remaining -= applied;
+      source.remaining -= applied;
+
+      if (
+        source.remaining <= 0.01
+      ) {
+        sourceIndex++;
       }
-    } else {
+    }
+  }
+} else {
       for (const { line, txn } of uniqueLines) {
         const ref = await getDetail(txn.TxnId, txn.TxnType);
         const refNo = getRefFromLineEx(line.LineEx) || ref?.docNumber || txn.TxnId;

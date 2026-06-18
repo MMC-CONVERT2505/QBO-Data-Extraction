@@ -1,41 +1,29 @@
 import OAuthClient from "intuit-oauth";
+import crypto from "crypto";
 import config from "../config/qbo.config.js";
-import { clearCacheForRealm } from '../config/database.js';
+import {
+  clearCacheForRealm,
+  createQboToken,
+  getQboToken,
+  deleteQboToken,
+} from "../config/database.js";
 
-const oauthClient =
-  new OAuthClient({
-    clientId:
-      config.clientId,
+const oauthClient = new OAuthClient({
+  clientId: config.clientId,
+  clientSecret: config.clientSecret,
+  environment: config.environment,
+  redirectUri: config.redirectUri,
+});
 
-    clientSecret:
-      config.clientSecret,
-
-    environment:
-      config.environment,
-
-    redirectUri:
-      config.redirectUri,
+const getAuthUrl = (req, res) => {
+  const authUri = oauthClient.authorizeUri({
+    scope: [OAuthClient.scopes.Accounting],
+    state: "qbo-auth-state",
   });
 
-const getAuthUrl = (
-  req,
-  res
-) => {
-  const authUri =
-    oauthClient.authorizeUri({
-      scope: [
-        OAuthClient.scopes
-          .Accounting,
-      ],
-
-      state:
-        "qbo-auth-state",
-    });
-
-  res.json({
-    url: authUri,
-  });
+  res.json({ url: authUri });
 };
+
 const handleCallback = async (req, res) => {
   try {
     const authResponse = await oauthClient.createToken(
@@ -43,84 +31,94 @@ const handleCallback = async (req, res) => {
     );
 
     const tokens = authResponse.getJson();
+    const realmId = req.query.realmId;
 
-    req.session.accessToken  = tokens.access_token;
-    req.session.refreshToken = tokens.refresh_token;
-    req.session.realmId      = req.query.realmId;
-    req.session.companyName  = 'Production Company';
+    // ✅ Naya opaque session id banao — yeh frontend ko diya jayega
+    const sessionId = crypto.randomBytes(32).toString("hex");
 
-    req.session.save((err) => {
-      if (err) {
-       
-        return res.status(500).json({ error: 'Session save failed' });
-      }
-
-      // ✅ Token ko temporary query param se pass karo
-      const tempToken = Buffer.from(JSON.stringify({
-        accessToken:  tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        realmId:      req.query.realmId,
-      })).toString('base64');
-
-      res.redirect(`${process.env.FRONTEND_URL}/dashboard?auth=${tempToken}`);
+    await createQboToken({
+      sessionId,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      realmId,
+      companyName: "Production Company",
     });
 
+    // ✅ sessionId ko base64 mein pass karo (ab tokens raw nahi jaate URL mein)
+    const tempToken = Buffer.from(
+      JSON.stringify({ sessionId })
+    ).toString("base64");
+
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard?auth=${tempToken}`);
+
   } catch (err) {
-    console.error('❌ Callback error:', err.message);
+    console.error("❌ Callback error:", err.message);
     res.status(500).json({ error: err.message });
   }
 };
 
-const checkAuth = (req, res) => {
- 
+const checkAuth = async (req, res) => {
+  try {
+    const sessionId = req.headers["x-qbo-session"];
+    const tokenDoc = await getQboToken(sessionId);
 
-  const isAuth = !!(req.session?.accessToken && req.session?.realmId);
-  res.json({
-    isAuthenticated: isAuth,
-    companyName: req.session?.companyName || 'Production Company',
-    realmId: req.session?.realmId || null,
-  });
-};
+    const isAuth = !!(tokenDoc?.accessToken && tokenDoc?.realmId);
 
-// const logout = (req, res) => {
-//   req.session.destroy((err) => {
-//     if (err) {
-//       return res.status(500).json({ error: 'Logout failed' });
-//     }
-//     res.clearCookie('connect.sid');
-//     res.json({ message: 'Logged out successfully' });
-//   });
-// };
-
-const logout = (req, res) => {
-  const realmId = req.session?.realmId;
-  if (realmId) clearCacheForRealm(realmId).catch(console.error);
-
-  req.session.destroy((err) => {
-    if (err) return res.status(500).json({ error: 'Logout failed' });
-    res.clearCookie('connect.sid');
-    res.json({ message: 'Logged out successfully' });
-  });
-};
-
-const setSession = (req, res) => {
-  const { accessToken, refreshToken, realmId } = req.body;
-
-  if (!accessToken || !realmId) {
-    return res.status(400).json({ error: 'Missing token or realmId' });
+    res.json({
+      isAuthenticated: isAuth,
+      companyName: tokenDoc?.companyName || "Production Company",
+      realmId: tokenDoc?.realmId || null,
+    });
+  } catch (err) {
+    console.error("❌ checkAuth error:", err.message);
+    res.status(500).json({ isAuthenticated: false });
   }
+};
 
-  req.session.accessToken  = accessToken;
-  req.session.refreshToken = refreshToken;
-  req.session.realmId      = realmId;
-  req.session.companyName  = 'Production Company';
+const logout = async (req, res) => {
+  try {
+    const sessionId = req.headers["x-qbo-session"];
+    const tokenDoc = await getQboToken(sessionId);
 
-  req.session.save((err) => {
-    if (err) {
-      return res.status(500).json({ error: 'Session save failed' });
+    if (tokenDoc?.realmId) {
+      await clearCacheForRealm(tokenDoc.realmId).catch(console.error);
     }
-    res.json({ success: true });
-  });
+
+    await deleteQboToken(sessionId);
+
+    res.json({ message: "Logged out successfully" });
+  } catch (err) {
+    console.error("❌ logout error:", err.message);
+    res.status(500).json({ error: "Logout failed" });
+  }
+};
+
+// ✅ Replaces old setSession — ab sirf sessionId resolve karta hai
+// taaki frontend ko realmId/companyName mil jaye (auth=... query se aane ke baad)
+const setSession = async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "Missing sessionId" });
+    }
+
+    const tokenDoc = await getQboToken(sessionId);
+
+    if (!tokenDoc) {
+      return res.status(401).json({ error: "Invalid or expired session" });
+    }
+
+    res.json({
+      success: true,
+      sessionId,
+      realmId: tokenDoc.realmId,
+      companyName: tokenDoc.companyName,
+    });
+  } catch (err) {
+    console.error("❌ setSession error:", err.message);
+    res.status(500).json({ error: "Session validation failed" });
+  }
 };
 
 export {
@@ -128,5 +126,5 @@ export {
   handleCallback,
   checkAuth,
   logout,
-  setSession
+  setSession,
 };

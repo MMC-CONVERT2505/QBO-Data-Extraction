@@ -8,28 +8,12 @@ import {
   setSession
 } from "../controller/auth.controller.js";
 
-const router =
-  express.Router();
+const router = express.Router();
 
-router.get(
-  "/url",
-  getAuthUrl
-);
-
-router.get(
-  "/callback",
-  handleCallback
-);
-
-router.get(
-  "/check",
-  checkAuth
-);
-
-router.post(
-  "/logout",
-  logout
-);
+router.get("/url", getAuthUrl);
+router.get("/callback", handleCallback);
+router.get("/check", checkAuth);
+router.post("/logout", logout);
 router.post('/set-session', setSession);
 
 export default router;

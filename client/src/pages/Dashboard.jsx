@@ -1,3 +1,5 @@
+
+
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
@@ -42,24 +44,6 @@ export default function Dashboard() {
 
   const closeModal = () => setModal(prev => ({ ...prev, open: false }));
 
-  // useEffect(() => {
-  //   const fetchAuth = async () => {
-  //     try {
-  //       const res = await checkAuth();
-  //       if (res.data.isAuthenticated) {
-  //         setIsAuthenticated(true);
-  //         setCompanyName(res.data.companyName || 'Sandbox Company');
-  //         setLastSync(new Date().toLocaleTimeString());
-  //       } else {
-  //         navigate('/');
-  //       }
-  //     } catch {
-  //       navigate('/');
-  //     }
-  //   };
-  //   fetchAuth();
-  // }, []);
-
 
   useEffect(() => {
     const fetchAuth = async () => {
@@ -69,10 +53,16 @@ export default function Dashboard() {
         const authParam = urlParams.get('auth');
 
         if (authParam) {
-          // Token URL mein hai — backend ko send karo session set karne ke liye
           const decoded = JSON.parse(atob(authParam));
-          await axios.post('/api/auth/set-session', decoded, { withCredentials: true });
-          // URL clean karo
+          const { sessionId } = decoded;
+
+          if (sessionId) {
+            localStorage.setItem('qbo_session_id', sessionId);
+            await axios.post('/api/auth/set-session', { sessionId }, {
+              headers: { 'x-qbo-session': sessionId }
+            });
+          }
+
           window.history.replaceState({}, '', '/dashboard');
         }
 
@@ -95,26 +85,15 @@ export default function Dashboard() {
   const handleDisconnect = async () => {
     try {
       await logout();
+      localStorage.removeItem('qbo_session_id'); // ✅ local session bhi clear karo
       toast.success('Disconnected successfully');
       navigate('/');
     } catch {
+      localStorage.removeItem('qbo_session_id'); // ✅ failure pe bhi clear karo
       toast.error('Failed to disconnect');
     }
   };
 
-  // const handleFetchInvoices = async () => {
-  //   setInvoiceState(prev => ({ ...prev, loading: true }));
-  //   try {
-  //     const res = await getInvoiceAllocations();
-  //     const newState = { loading: false, exporting: false, data: res.data.data, count: res.data.count };
-  //     setInvoiceState(newState);
-  //     toast.success(`${res.data.count} invoice records fetched successfully`);
-  //     openModal('Invoice Allocations', res.data.data, exportInvoiceAllocations, 'Invoice_Allocations', newState, setInvoiceState);
-  //   } catch {
-  //     setInvoiceState(prev => ({ ...prev, loading: false }));
-  //     toast.error('Failed to fetch invoice data');
-  //   }
-  // };
   // ── handleFetch functions mein date pass karo ──
   const handleFetchInvoices = async () => {
     setInvoiceState(prev => ({ ...prev, loading: true }));
@@ -133,20 +112,6 @@ export default function Dashboard() {
   };
 
 
-  // const handleFetchBills = async () => {
-  //   setBillState(prev => ({ ...prev, loading: true }));
-  //   try {
-  //     const res = await getBillAllocations();
-  //     const newState = { loading: false, exporting: false, data: res.data.data, count: res.data.count };
-  //     setBillState(newState);
-  //     toast.success(`${res.data.count} bill records fetched successfully`);
-  //     openModal('Bill Allocations', res.data.data, exportBillAllocations, 'Bill_Allocations', newState, setBillState);
-  //   } catch {
-  //     setBillState(prev => ({ ...prev, loading: false }));
-  //     toast.error('Failed to fetch bill data');
-  //   }
-  // };
-
   const handleFetchBills = async () => {
     setBillState(prev => ({ ...prev, loading: true }));
     try {
@@ -162,20 +127,6 @@ export default function Dashboard() {
       toast.error('Failed to fetch bill data');
     }
   };
-
-  // const handleFetchAP = async () => {
-  //   setApState(prev => ({ ...prev, loading: true }));
-  //   try {
-  //     const res = await getAPOverpayments();
-  //     const newState = { loading: false, exporting: false, data: res.data.data, count: res.data.count };
-  //     setApState(newState);
-  //     toast.success(`${res.data.count} AP overpayment records fetched successfully`);
-  //     openModal('AP Overpayments', res.data.data, exportAPOverpayments, 'AP_Overpayments', newState, setApState);
-  //   } catch {
-  //     setApState(prev => ({ ...prev, loading: false }));
-  //     toast.error('Failed to fetch AP overpayment data');
-  //   }
-  // };
 
 
   const handleFetchAP = async () => {
@@ -194,19 +145,6 @@ export default function Dashboard() {
     }
   };
 
-  // const handleFetchAR = async () => {
-  //   setArState(prev => ({ ...prev, loading: true }));
-  //   try {
-  //     const res = await getAROverpayments();
-  //     const newState = { loading: false, exporting: false, data: res.data.data, count: res.data.count };
-  //     setArState(newState);
-  //     toast.success(`${res.data.count} AR overpayment records fetched successfully`);
-  //     openModal('AR Overpayments', res.data.data, exportAROverpayments, 'AR_Overpayments', newState, setArState);
-  //   } catch {
-  //     setArState(prev => ({ ...prev, loading: false }));
-  //     toast.error('Failed to fetch AR overpayment data');
-  //   }
-  // };
 
 
   const handleFetchAR = async () => {
@@ -322,7 +260,7 @@ export default function Dashboard() {
           <ModuleCard
             icon="📄"
             title="Invoice Allocations"
-            description="Fetch Payment & CreditMemo allocations linked to Invoices"
+            description="Track how customer payments and credits are allocated across invoices."
             color="blue"
             loading={invoiceState.loading}
             exporting={invoiceState.exporting}
@@ -340,7 +278,7 @@ export default function Dashboard() {
           <ModuleCard
             icon="🧾"
             title="Bill Allocations"
-            description="Fetch BillPayment & VendorCredit allocations linked to Bills"
+            description="Track how vendor payments and credits are allocated across bills."
             color="purple"
             loading={billState.loading}
             exporting={billState.exporting}
@@ -358,7 +296,7 @@ export default function Dashboard() {
           <ModuleCard
             icon="💸"
             title="AP Overpayments"
-            description="Fetch unapplied vendor payments & unused vendor credits (Accounts Payable)"
+            description="Track vendor overpayments and unused credits in Accounts Payable."
             color="orange"
             loading={apState.loading}
             exporting={apState.exporting}
@@ -376,7 +314,7 @@ export default function Dashboard() {
           <ModuleCard
             icon="💰"
             title="AR Overpayments"
-            description="Fetch unapplied customer payments & unused credit memos (Accounts Receivable)"
+            description="Track customer overpayments and unused credits in Accounts Receivable."
             color="green"
             loading={arState.loading}
             exporting={arState.exporting}
