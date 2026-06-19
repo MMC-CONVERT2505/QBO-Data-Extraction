@@ -57,7 +57,7 @@ const qboTokenSchema = new mongoose.Schema({
   updatedAt:    { type: Date, default: Date.now },
 }, { timestamps: false });
 
-qboTokenSchema.index({ sessionId: 1 }, { unique: true });
+// qboTokenSchema.index({ sessionId: 1 }, { unique: true });
 // Auto-expire after 24h of inactivity (matches old session ttl)
 qboTokenSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 86400 });
 
