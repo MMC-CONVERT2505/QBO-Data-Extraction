@@ -2,7 +2,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: '',
+  baseURL: '/qbo-data-api',
 })
 
 // ✅ Har request mein sessionId ko x-qbo-session header se attach karo
@@ -25,32 +25,32 @@ api.interceptors.response.use(
   }
 )
 
-export const getAuthUrl = () => api.get('/api/auth/url')
-export const checkAuth = () => api.get('/api/auth/check')
-export const logout = () => api.post('/api/auth/logout')
+export const getAuthUrl = () => api.get('/auth/url')
+export const checkAuth = () => api.get('/auth/check')
+export const logout = () => api.post('/auth/logout')
 
 // ── Date params ke saath ──
 export const getInvoiceAllocations = (startDate, endDate) =>
-  api.get('/api/allocation/invoice', { params: { startDate, endDate } })
+  api.get('/allocation/invoice', { params: { startDate, endDate } })
 export const exportInvoiceAllocations = (startDate, endDate) =>
-  api.get('/api/allocation/invoice/export', { params: { startDate, endDate }, responseType: 'blob' })
+  api.get('/allocation/invoice/export', { params: { startDate, endDate }, responseType: 'blob' })
 
 export const getBillAllocations = (startDate, endDate) =>
-  api.get('/api/allocation/bill', { params: { startDate, endDate } })
+  api.get('/allocation/bill', { params: { startDate, endDate } })
 export const exportBillAllocations = (startDate, endDate) =>
-  api.get('/api/allocation/bill/export', { params: { startDate, endDate }, responseType: 'blob' })
+  api.get('/allocation/bill/export', { params: { startDate, endDate }, responseType: 'blob' })
 
 export const getAPOverpayments = (startDate, endDate) =>
-  api.get('/api/allocation/overpayment/ap', { params: { startDate, endDate } })
+  api.get('/allocation/overpayment/ap', { params: { startDate, endDate } })
 export const exportAPOverpayments = (startDate, endDate) =>
-  api.get('/api/allocation/overpayment/ap/export', { params: { startDate, endDate }, responseType: 'blob' })
+  api.get('/allocation/overpayment/ap/export', { params: { startDate, endDate }, responseType: 'blob' })
 
 export const getAROverpayments = (startDate, endDate) =>
-  api.get('/api/allocation/overpayment/ar', { params: { startDate, endDate } })
+  api.get('/allocation/overpayment/ar', { params: { startDate, endDate } })
 export const exportAROverpayments = (startDate, endDate) =>
-  api.get('/api/allocation/overpayment/ar/export', { params: { startDate, endDate }, responseType: 'blob' })
+  api.get('/allocation/overpayment/ar/export', { params: { startDate, endDate }, responseType: 'blob' })
 
-export const getOverpayments = () => api.get('/api/allocation/overpayment')
+export const getOverpayments = () => api.get('/allocation/overpayment')
 
 // ── SSE: AP Overpayments with real-time progress ──
 export const getAPOverpaymentsSSE = (startDate, endDate, onProgress, onDone, onError) => {
@@ -60,7 +60,7 @@ export const getAPOverpaymentsSSE = (startDate, endDate, onProgress, onDone, onE
   if (endDate)   params.append('endDate', endDate);
   if (sessionId) params.append('sessionId', sessionId);
 
-  const url = `/api/allocation/overpayment/ap/progress?${params.toString()}`;
+const url = `/qbo-data-api/allocation/overpayment/ap/progress?${params.toString()}`;
   const es = new EventSource(url);
 
   es.onmessage = (e) => {
