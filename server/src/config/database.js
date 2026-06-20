@@ -10,8 +10,8 @@ const connectDB = async () => {
   }
 };
 
-// ── Cache TTL: 24 hours ──
-export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// ── Cache TTL: 4 hours ──
+export const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 
 // ── Payment Cache Schema ──
 const paymentCacheSchema = new mongoose.Schema({
@@ -22,7 +22,7 @@ const paymentCacheSchema = new mongoose.Schema({
 }, { timestamps: false });
 
 paymentCacheSchema.index({ id: 1, realmId: 1 }, { unique: true });
-paymentCacheSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 86400 });
+paymentCacheSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 14400 });
 
 // ── BillPayment Cache Schema ──
 const billPaymentCacheSchema = new mongoose.Schema({
@@ -33,7 +33,7 @@ const billPaymentCacheSchema = new mongoose.Schema({
 }, { timestamps: false });
 
 billPaymentCacheSchema.index({ id: 1, realmId: 1 }, { unique: true });
-billPaymentCacheSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 86400 });
+billPaymentCacheSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 14400 });
 
 // ── Entity Cache Schema ──
 const entityCacheSchema = new mongoose.Schema({
@@ -44,7 +44,7 @@ const entityCacheSchema = new mongoose.Schema({
 }, { timestamps: false });
 
 entityCacheSchema.index({ cacheKey: 1, realmId: 1 }, { unique: true });
-entityCacheSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 86400 });
+entityCacheSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 14400 });
 
 // ── QBO Auth Token Schema (replaces sessions folder) ──
 const qboTokenSchema = new mongoose.Schema({
