@@ -5,7 +5,7 @@ import Dashboard from './pages/Dashboard'
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/qbo-data-extraction">
       <Toaster position="top-right" />
       <Routes>
         <Route path="/" element={<Login />} />
