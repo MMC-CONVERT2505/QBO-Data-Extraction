@@ -7,7 +7,7 @@ import Navbar from '../components/Navbar';
 import StatsBar from '../components/StatsBar';
 import ModuleCard from '../components/ModuleCard';
 import { Shield } from 'lucide-react';
-import Modal from '../components/Modal';
+import Modal from '../components/modal';
 import axios from 'axios';
 import {
   checkAuth,
