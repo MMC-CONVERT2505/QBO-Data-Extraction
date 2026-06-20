@@ -2,9 +2,8 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: '',
+  baseURL: "/qbo-data-api",
 })
-
 // ✅ Har request mein sessionId ko x-qbo-session header se attach karo
 api.interceptors.request.use((config) => {
   const sessionId = localStorage.getItem('qbo_session_id')
